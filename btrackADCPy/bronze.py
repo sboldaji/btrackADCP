@@ -1,5 +1,4 @@
 import os
-
 import pandas as pd
 import xarray as xr
 import sys
@@ -62,27 +61,27 @@ def convert_csv_to_netcdf(file_path, file_name):
 
     # combine bin depth and u_bm, v_bm and percentgood into a single dataframe, with datetime as index using xarray
     ds = xr.Dataset({
-        'datetime': datetime,
-        'BTEast': BTEast,
-        'BTNorth': BTNorth,
-        'LAT': LAT,
-        'LON': LON,
-        'bin_depth': (('bin_depth','datetime'),bin_depth),
+        'BTEast': (('datetime'),BTEast),
+        'BTNorth': (('datetime'),BTNorth),
+        'LAT': (('datetime'),LAT),
+        'LON': (('datetime'),LON),
+        'depth': (('datetime'),depth),
         'u_bm': (('bin_depth','datetime'),u_bm),
         'v_bm': (('bin_depth','datetime'),v_bm),
         'percentgood': (('bin_depth','datetime'),percentgood),
-        'depth': depth,
         'backscatter': (('bin_depth','datetime','beam'),backscatter),
-        'temp': temp,
+        'temp': (('datetime'),temp),
         'error_velocity': (('bin_depth','datetime'),error_velocity),
-    })
-
-    # # set index as datetime
-    # ds = ds.set_index(datetime='datetime')
+    },
+        {
+            'datetime': datetime,
+            'bin_depth': (('bin_depth', 'datetime'), bin_depth),
+        }
+    )
 
 
     # Define the output NetCDF file path
-    netcdf_file = file_full_path.replace(".mat", ".nc")
+    netcdf_file = file_full_path.replace(".mat", "_bronze.nc")
 
     # 1. QC: Bottom-track speed (cm/s) should be greater than 10 cm/s
     bts_threshold = 10.0  # cm/s
@@ -99,37 +98,39 @@ def convert_csv_to_netcdf(file_path, file_name):
             ds = ds.where(~bts_mask, drop=True)
             print(f"Dropped {bts_mask.sum().item()} rows from the dataset.")
             # # For consistency, we can still add the mask as a new variable to the dataset, even though the rows have been dropped
-            # ds = ds.assign(BottomTrackSpeedMask=bts_mask)
+            ds = ds.assign(BottomTrackSpeedMask=bts_mask)
         else:
-            # print("Rows will be flagged but not dropped.")
+            print("Rows will be flagged but not dropped.")
             print(f'Nothing will be done with the rows with Bottom-track speed <= {bts_threshold} cm/s.')
             # Add the mask as a new variable to the dataset
-            # ds = ds.assign(BottomTrackSpeedMask=bts_mask)
+            ds = ds.assign(BottomTrackSpeedMask=bts_mask)
     else:
         print("All rows have Bottom-track speed greater than the threshold.")
         # For consistency, the mask is still added to the dataset.
-        # ds = ds.assign(BottomTrackSpeedMask=bts_mask)
+        ds = ds.assign(BottomTrackSpeedMask=bts_mask)
 
     # 2. APPLY STREAMLINING CRITERIA:
     # Streamlining criteria from Valle-Levinson (2024):
     # Error velocity should be less than 10
     # Percent good should be greater than 70
     # Discharge should be less than 100 (not used for now)
-    #TODO the validity mask has an issue where its not correctly dropping all items only datetimes and depths, this is
-    # likely because of an issue with how the data system is sctructred and linked and needs to be addressed.
-    # valid_mask = (ds.error_velocity <= 10) & (ds.percentgood >= 70)
 
-    # ds = ds.where(valid_mask, drop=True)
+    if ds.percentgood.max() and ds.error_velocity.max():
+        valid_mask = (ds.error_velocity <= 10) & (ds.percentgood >= 70)
+        ds = ds.where(valid_mask, drop=True)
 
+    else:
+        pass
 
     # add a new variable to the dataset to indicate which rows have a Bottom-track speed less than or equal to the threshold (True for those rows, False otherwise)
-    ds = ds.assign(BottomTrackSpeedMask=bts_mask)
+    # ds = ds.assign(BottomTrackSpeedMask=bts_mask)
 
     # Save the xarray Dataset to a NetCDF file
     ds.to_netcdf(netcdf_file)
 
     return netcdf_file
 
+convert_csv_to_netcdf("data/adcp_data", "108191_20260611T161412UTC.mat")
 
 def create_diagnostic_plots(netcdf_file):
     # generate and save figures into directory named after the netcdf file name and in a sub-driectory called bronze, create if they do not exist
@@ -233,7 +234,7 @@ def create_diagnostic_plots(netcdf_file):
     ax.set_ylabel('Temperature')
     plt.savefig(os.path.join(fig_dir, "time_vs_temperature.png"))
 
-
+# create_diagnostic_plots("data/adcp_data/108191_20260611T161412UTC.nc")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert CSV to NetCDF")
