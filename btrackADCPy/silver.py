@@ -19,7 +19,7 @@ def silver(bronze_netcdf, dir):
     # calculate alpha and beta, the compass correction parameters
     alpha = np.arctan2(np.mean(ds.BTNorth * Vship - ds.BTEast * Uship), np.mean(ds.BTNorth * Uship + ds.BTEast * Vship))
     beta = np.sqrt(np.mean(Uship**2 + Vship**2) / (np.mean(ds.BTNorth**2 + ds.BTEast**2))) - 1
-    print(f"Alpha: {alpha} degrees, Beta: {beta}")
+    print(f"Alpha: {np.rad2deg(alpha).values} degrees, Beta: {beta.values}")
 
     Ucorr = (1 + beta * (ds.u_bm * np.cos(alpha) - ds.v_bm * np.sin(alpha)))
     Vcorr = (1 + beta * (ds.u_bm * np.sin(alpha) + ds.v_bm * np.cos(alpha)))
